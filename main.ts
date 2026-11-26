@@ -11,8 +11,13 @@
 //
 // The entry is deterministic: the same repository always hands in the same bytes,
 // so the two grading runs agree.
+//
+// 2026-11-26: the first submission failed run_completes (exit 1) because this file
+// removed /output itself with rmSync before recreating it. /output is the grader's
+// mount, owned by root, and the program runs as uid 65534, so rmdir fails with
+// EPERM. The clean-slate step now empties the directory's contents instead.
 
-import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildDossier } from './vendor/makefun-game.ts';
@@ -30,8 +35,17 @@ if (!existsSync(join(gameDir, 'index.html'))) {
 }
 
 // Start from a clean slate so a stale file from an earlier run can never leak in.
-rmSync(outDir, { recursive: true, force: true });
+// /output is the grader's own mount: the harness creates it (owned by root) and the
+// program runs as an unprivileged user (65534), so removing the directory itself
+// fails with EPERM and the run exits 1 before handing anything in. Empty its
+// contents instead and leave the directory in place.
 mkdirSync(outDir, { recursive: true });
+if (!statSync(outDir).isDirectory()) {
+  throw new Error(`output path is not a directory: ${outDir}`);
+}
+for (const name of readdirSync(outDir)) {
+  rmSync(join(outDir, name), { recursive: true, force: true });
+}
 
 // The game, exactly as it ships: static files, no build step, no network.
 cpSync(gameDir, join(outDir, 'game'), { recursive: true });
