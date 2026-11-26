@@ -66,6 +66,9 @@ with sync_playwright() as p:
         if st["screen"] in ("over", "end"):
             result = f"{st['screen']} score={st['score']} deliv={st['deliv']} ({st['over']})"
             break
+        if st["deliv"] >= 1:
+            result = f"DELIVERY! score={st['score']} leg={st['leg']} fuel={st['fuel']:.0f}"
+            break
         # --- pilot ---
         wp = st["wp"]
         want = set()
@@ -75,9 +78,27 @@ with sync_playwright() as p:
             tx, ty, tz = ring["x"], ring["y"], ring["z"]
             label = "ring"
         else:
-            tx, tz = wp["x"], wp["z"]
-            ty = 30
-            label = "strip"
+            # Landing: fly to a point 300 m out on the strip's extended
+            # centreline first, then ride the centreline down to the threshold.
+            # (Leg 1 target: Pine Island strip, heading north.)
+            sx, sz, sh, srad = -900, -700, 9, 0.0
+            fx, fz = math.sin(srad), -math.cos(srad)
+            apx, apz = sx - fx * 300, sz - fz * 300
+            dist_ap = math.hypot(apx - st["x"], apz - st["z"])
+            if dist_ap > 80:
+                tx, tz, ty = apx, apz, sh + 45
+                label = "approach"
+            else:
+                tx, tz = sx, sz
+                dist_strip = math.hypot(sx - st["x"], sz - st["z"])
+                ty = sh + 10 + max(0, dist_strip) * 0.08
+                label = "strip"
+            # Full flaps once on final.
+            dist = math.hypot(sx - st["x"], sz - st["z"])
+            if dist < 300 and not getattr(set_keys, "_flaps", False):
+                set_keys._flaps = True
+                page.keyboard.press("f")
+                page.keyboard.press("f")
         dx, dz = tx - st["x"], tz - st["z"]
         dist = math.hypot(dx, dz)
         # Slow down near the target: tight turns need low speed.
