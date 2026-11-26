@@ -72,6 +72,7 @@ with sync_playwright() as p:
         # --- pilot ---
         wp = st["wp"]
         want = set()
+        flare = False
         # waypoint from viewState has no y; rings carry y in world state
         ring = page.evaluate("() => { const w = window.__world; const r = w.rings.currentRing(); return r ? {x: r.x, y: r.y, z: r.z} : null; }")
         if ring:
@@ -83,16 +84,20 @@ with sync_playwright() as p:
             # (Leg 1 target: Pine Island strip, heading north.)
             sx, sz, sh, srad = -900, -700, 9, 0.0
             fx, fz = math.sin(srad), -math.cos(srad)
-            apx, apz = sx - fx * 300, sz - fz * 300
+            apx, apz = sx - fx * 250, sz - fz * 250
             dist_ap = math.hypot(apx - st["x"], apz - st["z"])
             if dist_ap > 80:
-                tx, tz, ty = apx, apz, sh + 45
+                # Hold altitude until lined up: never descend while manoeuvring.
+                tx, tz, ty = apx, apz, max(st["y"], sh + 70)
                 label = "approach"
             else:
                 tx, tz = sx, sz
                 dist_strip = math.hypot(sx - st["x"], sz - st["z"])
-                ty = sh + 10 + max(0, dist_strip) * 0.08
+                ty = sh + 10 + max(0, dist_strip) * 0.10
                 label = "strip"
+                if dist_strip < 60 and st["y"] < sh + 15:
+                    # Flare: ease off and hold her off the ground.
+                    flare = True
             # Full flaps once on final.
             dist = math.hypot(sx - st["x"], sz - st["z"])
             if dist < 300 and not getattr(set_keys, "_flaps", False):
@@ -103,6 +108,8 @@ with sync_playwright() as p:
         dist = math.hypot(dx, dz)
         # Slow down near the target: tight turns need low speed.
         target_thr = 0.45 if dist < 130 else 0.6 if dist < 350 else 0.85
+        if flare:
+            target_thr = 0.15
         if st["thr"] < target_thr - 0.03:
             want.add("w")
         elif st["thr"] > target_thr + 0.03:
