@@ -44,7 +44,9 @@ function flyFor(world, seconds) {
 }
 
 // Final approach: hold the strip's heading and ride a gentle glide slope down
-// to the threshold, gear down and flaps full, at landing speed.
+// to the threshold, gear down and flaps full, at landing speed. The nose aims
+// at a point on the centreline past the far threshold, so wind drift is
+// corrected instead of carried onto the grass beside the strip.
 function landFor(world, seconds) {
   const strip = STRIPS.pine;
   const rad = (strip.heading * Math.PI) / 180;
@@ -53,13 +55,19 @@ function landFor(world, seconds) {
   for (let i = 0; i < steps; i += 1) {
     if (world.screen !== SCREEN_PLAY) break;
     const p = world.plane;
+    // Track the centreline: aim at a point on it 120 m ahead, so a lateral
+    // offset becomes a heading correction and wind drift is flown out.
     const along = (p.pos.x - strip.x) * Math.sin(rad) + (p.pos.z - strip.z) * Math.cos(rad);
+    const across = (p.pos.x - strip.x) * Math.cos(rad) - (p.pos.z - strip.z) * Math.sin(rad);
+    const desiredHeading = rad + Math.atan2(-across, 60);
     const distToThreshold = along - strip.length / 2;
-    const desiredAlt = stripH + 10 + Math.max(0, distToThreshold) * 0.10;
-    const headingErr = wrapAngle(rad - p.heading);
+    // The glide ends AT the ground: the floor is the strip itself, so the
+    // plane actually touches down instead of skimming over it forever.
+    const desiredAlt = stripH + 1.5 + Math.max(0, distToThreshold) * 0.10;
+    const headingErr = wrapAngle(desiredHeading - p.heading);
     world.step(STEP, {
       pitch: Math.max(-1, Math.min(1, (desiredAlt - p.pos.y) * 0.03)),
-      roll: Math.max(-1, Math.min(1, -headingErr * 1.6)),
+      roll: Math.max(-1, Math.min(1, -headingErr * 2.2)),
       rudder: 0,
       throttleDelta: p.throttle < 0.38 ? 1 : p.throttle > 0.44 ? -1 : 0,
       flapPressed: false,

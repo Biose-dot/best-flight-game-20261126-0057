@@ -141,10 +141,13 @@ export class World {
       this.sound.thud();
     }
 
+    // A leg is live whenever the Kestrel is in the air: taking off starts it,
+    // and so does starting airborne (a staged scene, or a resume). Landing
+    // early on the target strip clears it again, in the landing branch below.
     if (!wasAirborne && p.airborne) {
-      this.onLeg = true;
       this.sound.blip(520, 0, 0.15, 'sine', 0.12);
     }
+    if (p.airborne) this.onLeg = true;
 
     // Rings: only while airborne on the current leg.
     if (p.airborne && this.rings.checkPass(p.pos)) {
